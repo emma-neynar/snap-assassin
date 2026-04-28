@@ -1,3 +1,6 @@
+import { Hono } from 'hono';
+import { handle } from 'hono/vercel';
+import { cors } from 'hono/cors';
 import { MEDIA_TYPE, validateSnapResponse, snapResponseSchema } from '@farcaster/snap';
 import { snapJsonRenderCatalog } from '@farcaster/snap/ui';
 import { parseRequest } from '@farcaster/snap/server';
@@ -5,11 +8,9 @@ import { playerSnap } from '../src/pages/player.js';
 
 export const config = { runtime: 'nodejs' };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Accept',
-};
+const app = new Hono();
+
+app.use('*', cors({ origin: '*' }));
 
 function snapOrigin(req: Request): string {
   const fromEnv = process.env.SNAP_PUBLIC_BASE_URL?.trim();
@@ -21,27 +22,10 @@ function snapOrigin(req: Request): string {
   return `${proto}://${host}`;
 }
 
-function fullUrl(req: Request): URL {
-  // req.url may be a relative path in Vercel's Node runtime — resolve against origin
-  try {
-    return new URL(req.url);
-  } catch {
-    return new URL(req.url, snapOrigin(req));
-  }
-}
+function buildSnapResponse(payload: unknown, req: Request): Response {
+  const u = new URL(req.url);
+  const resourcePath = u.pathname + u.search;
 
-function resourcePath(req: Request): string {
-  const u = fullUrl(req);
-  return u.pathname + u.search;
-}
-
-function buildLinkHeader(path: string): string {
-  return [MEDIA_TYPE, 'text/html']
-    .map(t => `<${path}>; rel="alternate"; type="${t}"`)
-    .join(', ');
-}
-
-function snapResponse(payload: unknown, path: string): Response {
   const validation = validateSnapResponse(payload);
   if (!validation.valid) {
     return Response.json({ error: 'invalid snap page', issues: validation.issues }, { status: 400 });
@@ -51,48 +35,45 @@ function snapResponse(payload: unknown, path: string): Response {
     return Response.json({ error: 'invalid snap ui', issues: catalogResult.error?.issues ?? [] }, { status: 400 });
   }
   const finalized = snapResponseSchema.parse(payload);
+  const linkHeader = [MEDIA_TYPE, 'text/html']
+    .map(t => `<${resourcePath}>; rel="alternate"; type="${t}"`)
+    .join(', ');
+
   return new Response(JSON.stringify(finalized), {
     status: 200,
     headers: {
-      ...CORS_HEADERS,
       'Content-Type': `${MEDIA_TYPE}; charset=utf-8`,
       Vary: 'Accept',
-      Link: buildLinkHeader(path),
+      Link: linkHeader,
     },
   });
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
+app.get('*', async (c) => {
+  const req = c.req.raw;
+  const payload = await playerSnap({ action: { type: 'get' }, request: req });
+  return buildSnapResponse(payload, req);
+});
+
+app.post('*', async (c) => {
+  const req = c.req.raw;
+  const skipJFS = ['1', 'true', 'yes'].includes(
+    process.env.SKIP_JFS_VERIFICATION?.trim().toLowerCase() ?? ''
+  );
+  const parsed = await parseRequest(req, {
+    skipJFSVerification: skipJFS,
+    requestOrigin: snapOrigin(req),
+  });
+  if (!parsed.success) {
+    const err = parsed.error;
+    const status = err.type === 'signature' || err.type === 'fid_mismatch' ? 401 : 400;
+    const body = err.type === 'validation'
+      ? { error: 'invalid POST body', issues: err.issues }
+      : { error: err.message };
+    return c.json(body, status);
   }
+  const payload = await playerSnap({ action: parsed.action, request: req });
+  return buildSnapResponse(payload, req);
+});
 
-  const path = resourcePath(req);
-
-  // Ensure the request has a full URL so snap handlers can parse query params
-  const fullReq = new Request(fullUrl(req).toString(), req);
-
-  if (req.method === 'GET') {
-    const payload = await playerSnap({ action: { type: 'get' }, request: fullReq });
-    return snapResponse(payload, path);
-  }
-
-  if (req.method === 'POST') {
-    const skipJFS = ['1', 'true', 'yes'].includes(
-      process.env.SKIP_JFS_VERIFICATION?.trim().toLowerCase() ?? ''
-    );
-    const parsed = await parseRequest(fullReq, { skipJFSVerification: skipJFS, requestOrigin: snapOrigin(req) });
-    if (!parsed.success) {
-      const err = parsed.error;
-      const status = err.type === 'signature' || err.type === 'fid_mismatch' ? 401 : 400;
-      const body = err.type === 'validation'
-        ? { error: 'invalid POST body', issues: err.issues }
-        : { error: err.message };
-      return Response.json(body, { status, headers: CORS_HEADERS });
-    }
-    const payload = await playerSnap({ action: parsed.action, request: fullReq });
-    return snapResponse(payload, path);
-  }
-
-  return new Response('Method not allowed', { status: 405 });
-}
+export default handle(app);
