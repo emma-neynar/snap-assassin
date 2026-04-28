@@ -9,7 +9,35 @@ import type { Player } from '../types.js';
 
 const HOST_FID = process.env.HOST_FID ? Number(process.env.HOST_FID) : null;
 
+const ALLOWED_FIDS: Set<number> | null = process.env.ALLOWED_FIDS
+  ? new Set(process.env.ALLOWED_FIDS.split(',').map(s => Number(s.trim())).filter(Boolean))
+  : null;
+
+function isAllowed(fid: number): boolean {
+  return ALLOWED_FIDS === null || ALLOWED_FIDS.has(fid);
+}
+
 // ── Page builders ─────────────────────────────────────────────────────────────
+
+function testingSplashPage(base: string) {
+  return buildResponse({
+    elements: {
+      page: stack(['title', 'subtitle', 'btn']),
+      title: text('BERT IS TESTING HIS SNAP', { weight: 'bold', align: 'center' }),
+      subtitle: text('private beta. tap to see if you made the list.', { size: 'sm', align: 'center' }),
+      btn: submitBtn("am i in? →", `${base}/?a=go`, { variant: 'primary' }),
+    },
+  });
+}
+
+function notAllowedPage() {
+  return buildResponse({
+    elements: {
+      page: stack(['msg']),
+      msg: item('not on the list.', 'this beta is invite-only.'),
+    },
+  });
+}
 
 function hookPage(base: string) {
   return buildResponse({
@@ -195,15 +223,20 @@ export const mainSnap: SnapFunction = async (ctx) => {
   const url = new URL(ctx.request.url);
   const action = url.searchParams.get('a') ?? '';
 
-  if (ctx.action.type === 'get') return hookPage(base) as never;
+  if (ctx.action.type === 'get') return testingSplashPage(base) as never;
 
   const fid = ctx.action.user.fid;
+
+  if (!isAllowed(fid)) return notAllowedPage() as never;
+
   const config = await db.getGameConfig();
 
   await db.processExpiredGracePeriods();
   await db.maybeStartGame();
 
   if (action === 'nope') return nothanksPage() as never;
+
+  if (action === 'go') return explainerPage(base) as never;
 
   if (action === 'explain') return explainerPage(base) as never;
 
