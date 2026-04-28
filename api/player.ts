@@ -21,8 +21,17 @@ function snapOrigin(req: Request): string {
   return `${proto}://${host}`;
 }
 
+function fullUrl(req: Request): URL {
+  // req.url may be a relative path in Vercel's Node runtime — resolve against origin
+  try {
+    return new URL(req.url);
+  } catch {
+    return new URL(req.url, snapOrigin(req));
+  }
+}
+
 function resourcePath(req: Request): string {
-  const u = new URL(req.url);
+  const u = fullUrl(req);
   return u.pathname + u.search;
 }
 
@@ -60,8 +69,11 @@ export default async function handler(req: Request): Promise<Response> {
 
   const path = resourcePath(req);
 
+  // Ensure the request has a full URL so snap handlers can parse query params
+  const fullReq = new Request(fullUrl(req).toString(), req);
+
   if (req.method === 'GET') {
-    const payload = await playerSnap({ action: { type: 'get' }, request: req });
+    const payload = await playerSnap({ action: { type: 'get' }, request: fullReq });
     return snapResponse(payload, path);
   }
 
@@ -69,7 +81,7 @@ export default async function handler(req: Request): Promise<Response> {
     const skipJFS = ['1', 'true', 'yes'].includes(
       process.env.SKIP_JFS_VERIFICATION?.trim().toLowerCase() ?? ''
     );
-    const parsed = await parseRequest(req, { skipJFSVerification: skipJFS, requestOrigin: snapOrigin(req) });
+    const parsed = await parseRequest(fullReq, { skipJFSVerification: skipJFS, requestOrigin: snapOrigin(req) });
     if (!parsed.success) {
       const err = parsed.error;
       const status = err.type === 'signature' || err.type === 'fid_mismatch' ? 401 : 400;
@@ -78,7 +90,7 @@ export default async function handler(req: Request): Promise<Response> {
         : { error: err.message };
       return Response.json(body, { status, headers: CORS_HEADERS });
     }
-    const payload = await playerSnap({ action: parsed.action, request: req });
+    const payload = await playerSnap({ action: parsed.action, request: fullReq });
     return snapResponse(payload, path);
   }
 
