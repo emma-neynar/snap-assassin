@@ -321,7 +321,12 @@ export const mainSnap: SnapFunction = async (ctx) => {
     if (!player) return hookPage(base) as never;
 
     const raw = ctx.action.inputs['hours'];
-    const selected = (Array.isArray(raw) ? raw : []).map(Number).filter(h => h >= 0 && h <= 23);
+    // cell_grid submits "row,col|row,col|..." — convert back to hour (row*6+col) for a 6-col grid
+    const rawStr = typeof raw === 'string' ? raw : '';
+    const selected = rawStr.length === 0 ? [] : rawStr.split('|')
+      .filter(p => p.includes(','))
+      .map(p => { const [r, c] = p.split(',').map(Number); return r * 6 + c; })
+      .filter(h => h >= 0 && h <= 23);
 
     if (selected.length !== 8) {
       return availabilityErrorPage(base, selected.length) as never;
