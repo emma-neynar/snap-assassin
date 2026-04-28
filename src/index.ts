@@ -17,6 +17,7 @@ registerSnapHandler(app, mainSnap, {
 // URL format: /player?fid=<fid>
 registerSnapHandler(app, playerSnap, {
   path: '/player',
+  og: false,
   openGraph: {
     title: 'Caster Assassin — Player Profile',
     description: 'This player is in the game. Are you their assassin?',
