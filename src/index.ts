@@ -9,6 +9,8 @@ const app = new Hono();
 // registerSnapHandler internally calls app.use(path, cors()) which combined
 // with app.get(path, handler) on the same non-root path corrupts Hono 4.12's
 // matchResult in #dispatch. A global 'use' middleware runs before routing.
+app.get('/ping-player', (c) => c.text('pong'));
+
 app.use('*', async (c, next) => {
   const base = process.env.SNAP_PUBLIC_BASE_URL || 'https://snap-assassin.vercel.app';
   const url = new URL(c.req.url, base);
@@ -20,7 +22,6 @@ app.use('*', async (c, next) => {
 
 // Main game snap at /
 registerSnapHandler(app, mainSnap, {
-  og: false,
   openGraph: {
     title: 'Caster Assassin',
     description: "An async elimination game on Farcaster. Hunt your target. Don't get got.",
