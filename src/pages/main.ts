@@ -231,7 +231,6 @@ export const mainSnap: SnapFunction = async (ctx) => {
 
   const config = await db.getGameConfig();
 
-  await db.processExpiredGracePeriods();
   await db.maybeStartGame();
 
   if (action === 'nope') return nothanksPage() as never;

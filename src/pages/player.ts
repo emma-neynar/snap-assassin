@@ -1,9 +1,9 @@
 import type { SnapFunction } from '@farcaster/snap';
 import * as db from '../db.js';
-import { notifyFid, getUsernameByFid } from '../neynar.js';
+import { getUsernameByFid } from '../neynar.js';
 import {
   buildResponse, stack, item, text, badge, separator,
-  submitBtn, fmtCountdown, snapBase,
+  submitBtn, composeCastBtn, snapBase,
 } from '../snap-utils.js';
 import type { Player } from '../types.js';
 
@@ -15,17 +15,6 @@ function publicAliveView(target: Player, base: string) {
       page: stack(['header', 'sep', 'approach_btn']),
       header: item(`@${target.username}`, 'still standing.'),
       sep: separator(),
-      approach_btn: submitBtn('approach', `${base}/player?fid=${target.fid}&a=approach`),
-    },
-  });
-}
-
-function publicGraceView(target: Player, base: string) {
-  return buildResponse({
-    elements: {
-      page: stack(['header', 'warn_badge', 'approach_btn']),
-      header: item(`@${target.username}`, 'still standing.'),
-      warn_badge: badge('incoming...', { color: 'amber' }),
       approach_btn: submitBtn('approach', `${base}/player?fid=${target.fid}&a=approach`),
     },
   });
@@ -58,47 +47,7 @@ function assassinReadyView(target: Player, base: string) {
     elements: {
       page: stack(['header', 'shot_btn']),
       header: item('your target is here.', `@${target.username} — now or never.`),
-      shot_btn: submitBtn('take the shot', `${base}/player?fid=${target.fid}&a=shoot`, { variant: 'primary' }),
-    },
-  });
-}
-
-function assassinWaitingView(target: Player) {
-  return buildResponse({
-    elements: {
-      page: stack(['header', 'status_badge']),
-      header: item('waiting...', `shot fired. @${target.username} has time to respond.`),
-      status_badge: badge(
-        target.grace_period_expires
-          ? `${fmtCountdown(target.grace_period_expires)} remaining`
-          : 'grace period active',
-        { color: 'amber' }
-      ),
-    },
-  });
-}
-
-function targetSelfGraceView(target: Player, base: string) {
-  const timeLeft = target.grace_period_expires
-    ? fmtCountdown(target.grace_period_expires)
-    : '< 5min';
-  return buildResponse({
-    elements: {
-      page: stack(['header', 'countdown_badge', 'sep', 'safe_btn']),
-      header: item('incoming.', "call safe or you're out."),
-      countdown_badge: badge(`${timeLeft} remaining`, { color: 'red' }),
-      sep: separator(),
-      safe_btn: submitBtn('call safe', `${base}/player?fid=${target.fid}&a=safe`, { variant: 'primary' }),
-    },
-  });
-}
-
-function targetSelfSafeView(target: Player) {
-  return buildResponse({
-    elements: {
-      page: stack(['header', 'status']),
-      header: item(`@${target.username}`, "you're safe — for now."),
-      status: text('your assassin will try again.', { size: 'sm' }),
+      shot_btn: submitBtn('take the shot 🎯', `${base}/player?fid=${target.fid}&a=shoot`, { variant: 'primary' }),
     },
   });
 }
@@ -107,31 +56,25 @@ function missView() {
   return buildResponse({
     elements: {
       page: stack(['header']),
-      header: item('missed.', "they weren't around."),
+      header: item('missed.', "they're in their quiet hours. try later."),
     },
   });
 }
 
-function shotFiredView(targetName: string) {
-  return buildResponse({
-    elements: {
-      page: stack(['header', 'hint']),
-      header: item('shot fired.', `@${targetName} has 5 minutes to call safe.`),
-      hint: text('check back soon to see if they made it.', { size: 'sm' }),
-    },
-  });
-}
-
-function eliminatedByYouView(newTargetName: string | null, base: string) {
+function eliminatedByYouView(killedName: string, newTargetName: string | null, base: string, playerUrl: string) {
   const children = newTargetName
-    ? ['header', 'new_target', 'sep', 'btn_refresh']
-    : ['header', 'btn_refresh'];
+    ? ['header', 'cast_btn', 'sep', 'new_target_label', 'new_target_badge']
+    : ['header', 'cast_btn'];
   return buildResponse({
     elements: {
       page: stack(children),
-      header: item('eliminated.', newTargetName ? 'your new target:' : 'game over.'),
-      ...(newTargetName ? { new_target: badge(`@${newTargetName}`, { color: 'red' }), sep: separator() } : {}),
-      btn_refresh: submitBtn('check game →', `${base}/?a=join`),
+      header: item(`@${killedName} is out. 💀`, newTargetName ? 'announce it. your next target:' : 'announce it. you might be the last one standing.'),
+      cast_btn: composeCastBtn('announce the kill 🎯', `just eliminated @${killedName} in caster assassin 💀`, playerUrl),
+      ...(newTargetName ? {
+        sep: separator(),
+        new_target_label: text('your new target:', { size: 'sm' }),
+        new_target_badge: badge(`@${newTargetName}`, { color: 'red' }),
+      } : {}),
     },
   });
 }
@@ -168,14 +111,11 @@ export const playerSnap: SnapFunction = async (ctx) => {
 
   if (!target) return errView('player not found.') as never;
 
-  await db.processExpiredGracePeriods();
-
   // ── Public GET ────────────────────────────────────────────────────────────
 
   if (ctx.action.type === 'get') {
     if (target.status === 'winner') return publicWinnerView(target) as never;
     if (target.status === 'eliminated') return publicEliminatedView(target) as never;
-    if (target.grace_period_active) return publicGraceView(target, base) as never;
     return publicAliveView(target, base) as never;
   }
 
@@ -188,26 +128,6 @@ export const playerSnap: SnapFunction = async (ctx) => {
   if (target.status === 'eliminated') return publicEliminatedView(target) as never;
 
   const config = await db.getGameConfig();
-
-  // ── call safe ─────────────────────────────────────────────────────────────
-
-  if (action === 'safe') {
-    if (viewerFid !== targetFid) return errView('not your call.') as never;
-
-    const fresh = await db.getPlayer(targetFid);
-    if (!fresh?.grace_period_active) return targetSelfSafeView(fresh ?? target) as never;
-
-    if (fresh.grace_period_expires && Date.now() > fresh.grace_period_expires) {
-      await db.processElimination(targetFid, fresh.assassin_fid!);
-      return publicEliminatedView((await db.getPlayer(targetFid)) ?? fresh) as never;
-    }
-
-    await db.clearGracePeriod(targetFid);
-    if (fresh.assassin_fid) {
-      await notifyFid(fresh.assassin_fid, 'Caster Assassin', `@${fresh.username} called safe. try again later.`);
-    }
-    return targetSelfSafeView(fresh) as never;
-  }
 
   // ── take the shot ─────────────────────────────────────────────────────────
 
@@ -228,21 +148,19 @@ export const playerSnap: SnapFunction = async (ctx) => {
     if (!freshTarget || freshTarget.status !== 'alive')
       return errView('already gone.') as never;
 
-    if (freshTarget.grace_period_active) return assassinWaitingView(freshTarget) as never;
-
     // Bitmask check: availability_start stores the 24 away hours as bit flags
     const utcHour = new Date().getUTCHours();
     const isAway = Boolean((freshTarget.availability_start >> utcHour) & 1);
     if (isAway) return missView() as never;
 
-    await db.startGracePeriod(targetFid);
-    await notifyFid(
-      targetFid,
-      'Caster Assassin 🎯',
-      `incoming. you have 5 minutes to call safe. go to your profile snap now.`
-    );
+    const killedName = freshTarget.username;
+    await db.processElimination(targetFid, viewerFid);
 
-    return shotFiredView(freshTarget.username) as never;
+    const updatedViewer = await db.getPlayer(viewerFid);
+    const newTarget = updatedViewer?.target_fid ? await db.getPlayer(updatedViewer.target_fid) : null;
+    const newTargetName = newTarget?.username ?? null;
+
+    return eliminatedByYouView(killedName, newTargetName, base, `${base}/player?fid=${viewerFid}`) as never;
   }
 
   // ── approach / identify ───────────────────────────────────────────────────
@@ -252,7 +170,6 @@ export const playerSnap: SnapFunction = async (ctx) => {
 
   // Target viewing their own snap
   if (viewerFid === targetFid) {
-    if (fresh.grace_period_active) return targetSelfGraceView(fresh, base) as never;
     return buildResponse({
       elements: {
         page: stack(['header']),
@@ -265,12 +182,10 @@ export const playerSnap: SnapFunction = async (ctx) => {
   if (fresh.assassin_fid === viewerFid) {
     const viewer = await db.getPlayer(viewerFid);
     if (!viewer || viewer.status !== 'alive') return errView("you're out.") as never;
-    if (fresh.grace_period_active) return assassinWaitingView(fresh) as never;
     if (config.game_state !== 'active') return gameNotActiveView() as never;
     return assassinReadyView(fresh, base) as never;
   }
 
   // Everyone else
-  if (fresh.grace_period_active) return publicGraceView(fresh, base) as never;
   return publicAliveView(fresh, base) as never;
 };
