@@ -103,18 +103,18 @@ function availabilityErrorPage(base: string, picked: number) {
   });
 }
 
-function confirmedPage(base: string, playerUrl: string) {
+function confirmedPage(base: string) {
   return buildResponse({
     elements: {
       page: stack(['header', 'post_hint', 'btn_share']),
       header: item('you\'re in.', 'waiting for the host to start the hunt.'),
-      post_hint: text("post this snap to your farcaster profile — that's your body in the game.", { size: 'sm' }),
-      btn_share: composeCastBtn('post to my profile', "i'm playing caster assassin 🎯", playerUrl),
+      post_hint: text("share this to let people know you're in.", { size: 'sm' }),
+      btn_share: composeCastBtn('share', "i'm playing caster assassin 🎯", base),
     },
   });
 }
 
-async function waitingRoomPage(base: string, playerUrl: string, viewerFid: number) {
+async function waitingRoomPage(base: string, viewerFid: number) {
   const registeredCount = await db.getRegisteredCount();
   const isHost = HOST_FID !== null && viewerFid === HOST_FID;
 
@@ -127,7 +127,7 @@ async function waitingRoomPage(base: string, playerUrl: string, viewerFid: numbe
       page: stack(children),
       header: item('waiting room.', `${registeredCount} hunter${registeredCount !== 1 ? 's' : ''} signed up`),
       stats: badge(`${registeredCount} registered`, { color: 'blue' }),
-      share_btn: composeCastBtn('recruit more hunters', 'come play caster assassin 🎯', playerUrl),
+      share_btn: composeCastBtn('recruit more hunters', 'come play caster assassin 🎯', base),
       ...(isHost
         ? {
             start_btn: submitBtn('start the hunt →', `${base}/?a=start_game`, { variant: 'primary' }),
@@ -309,7 +309,7 @@ export const mainSnap: SnapFunction = async (ctx) => {
         const targetName = target?.username ?? `fid:${refreshed?.target_fid}`;
         return activeGamePage(base, refreshed!, targetName) as never;
       }
-      return (await waitingRoomPage(base, `${base}/player?fid=${fid}`, fid)) as never;
+      return (await waitingRoomPage(base, fid)) as never;
     }
 
     if (player.status === 'alive') {
@@ -354,7 +354,7 @@ export const mainSnap: SnapFunction = async (ctx) => {
     // Store selected quiet hours as a 24-bit bitmask in availability_start
     const awayMask = selected.reduce((mask, h) => mask | (1 << h), 0);
     await db.setAvailability(fid, awayMask);
-    return confirmedPage(base, `${base}/player?fid=${fid}`) as never;
+    return confirmedPage(base) as never;
   }
 
   if (HOST_FID !== null && fid === HOST_FID) {
