@@ -204,7 +204,7 @@ export const playerSnap: SnapFunction = async (ctx) => {
 
     await db.clearGracePeriod(targetFid);
     if (fresh.assassin_fid) {
-      await notifyFid(fresh.assassin_fid, 'Snap Assassin', `@${fresh.username} called safe. try again later.`);
+      await notifyFid(fresh.assassin_fid, 'Caster Assassin', `@${fresh.username} called safe. try again later.`);
     }
     return targetSelfSafeView(fresh) as never;
   }
@@ -238,7 +238,7 @@ export const playerSnap: SnapFunction = async (ctx) => {
     await db.startGracePeriod(targetFid);
     await notifyFid(
       targetFid,
-      'Snap Assassin 🎯',
+      'Caster Assassin 🎯',
       `incoming. you have 5 minutes to call safe. go to your profile snap now.`
     );
 

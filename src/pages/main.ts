@@ -15,10 +15,26 @@ function hookPage(base: string) {
   return buildResponse({
     elements: {
       page: stack(['title', 'subtitle', 'sep', 'btn_in']),
-      title: text('snap assassin', { weight: 'bold' }),
-      subtitle: text("an async elimination game. hunt your target. don't get got.", { size: 'sm' }),
+      title: text('caster assassin', { weight: 'bold' }),
+      subtitle: text('do you want to play a game?', { size: 'sm' }),
       sep: separator(),
-      btn_in: submitBtn("i'm in", `${base}/?a=join`, { variant: 'primary' }),
+      btn_in: submitBtn("i'm in →", `${base}/?a=explain`, { variant: 'primary' }),
+    },
+  });
+}
+
+function explainerPage(base: string) {
+  return buildResponse({
+    elements: {
+      page: stack(['header', 'rule1', 'rule2', 'rule3', 'rule4', 'sep', 'btn_join', 'btn_nope']),
+      header: item('here\'s how it works.', 'an async elimination game on farcaster.'),
+      rule1: text('🎯  you get a target. hunt them down by visiting their profile snap.', { size: 'sm' }),
+      rule2: text('⏰  pick 8 quiet hours (UTC) when you go dark — you\'re unhuntable then.', { size: 'sm' }),
+      rule3: text('🛡️  if someone shoots you, you have 5 minutes to call safe. miss it and you\'re out.', { size: 'sm' }),
+      rule4: text('💀  last one standing wins.', { size: 'sm' }),
+      sep: separator(),
+      btn_join: submitBtn('let\'s go →', `${base}/?a=join`, { variant: 'primary' }),
+      btn_nope: submitBtn('not today', `${base}/?a=nope`),
     },
   });
 }
@@ -27,7 +43,7 @@ function availabilityPage(base: string) {
   return buildResponse({
     elements: {
       page: stack(['header', 'grid', 'btn_lock']),
-      header: item("pick your 8 quiet hours (UTC).", 'tap exactly 8 hours when you go dark — you\'re safe and unhuntable during these.'),
+      header: item('pick your 8 quiet hours (UTC).', 'you\'re safe — and unhuntable — during these.'),
       grid: {
         type: 'cell_grid',
         props: {
@@ -35,14 +51,16 @@ function availabilityPage(base: string) {
           cols: 6,
           rows: 4,
           gap: 'sm',
-          rowHeight: 32,
+          rowHeight: 36,
           select: 'multiple',
           cells: Array.from({ length: 24 }, (_, i) => ({
-            label: String(i).padStart(2, '0'),
+            row: Math.floor(i / 6),
+            col: i % 6,
+            content: String(i).padStart(2, '0'),
           })),
         },
       },
-      btn_lock: submitBtn('lock it in', `${base}/?a=set_avail`, { variant: 'primary' }),
+      btn_lock: submitBtn('lock it in →', `${base}/?a=set_avail`, { variant: 'primary' }),
     },
   });
 }
@@ -51,8 +69,8 @@ function availabilityErrorPage(base: string, picked: number) {
   return buildResponse({
     elements: {
       page: stack(['header', 'hint', 'btn_back']),
-      header: item(`you picked ${picked} hours.`, 'select exactly 8 — no more, no less.'),
-      hint: text('tap the grid again and choose exactly 8 UTC hours to go quiet.', { size: 'sm' }),
+      header: item(`you picked ${picked} hours.`, 'needs to be exactly 8. no more, no less.'),
+      hint: text('go back and tap exactly 8 UTC hours to go quiet.', { size: 'sm' }),
       btn_back: submitBtn('try again', `${base}/?a=join`, { variant: 'primary' }),
     },
   });
@@ -62,9 +80,9 @@ function confirmedPage(base: string, playerUrl: string) {
   return buildResponse({
     elements: {
       page: stack(['header', 'post_hint', 'btn_share']),
-      header: item('locked in.', 'waiting for the host to start the game.'),
+      header: item('you\'re in.', 'waiting for the host to start the hunt.'),
       post_hint: text("post this snap to your farcaster profile — that's your body in the game.", { size: 'sm' }),
-      btn_share: composeCastBtn('post to my profile', "i'm playing snap assassin 🎯", playerUrl),
+      btn_share: composeCastBtn('post to my profile', "i'm playing caster assassin 🎯", playerUrl),
     },
   });
 }
@@ -80,12 +98,12 @@ async function waitingRoomPage(base: string, playerUrl: string, viewerFid: numbe
   return buildResponse({
     elements: {
       page: stack(children),
-      header: item('waiting room', `${registeredCount} hunter${registeredCount !== 1 ? 's' : ''} signed up`),
+      header: item('waiting room.', `${registeredCount} hunter${registeredCount !== 1 ? 's' : ''} signed up`),
       stats: badge(`${registeredCount} registered`, { color: 'blue' }),
-      share_btn: composeCastBtn('recruit more players', 'come play snap assassin 🎯', playerUrl),
+      share_btn: composeCastBtn('recruit more hunters', 'come play caster assassin 🎯', playerUrl),
       ...(isHost
-        ? { start_btn: submitBtn('start the game →', `${base}/?a=start_game`, { variant: 'primary' }) }
-        : { hint: text('waiting for the host to start the game.', { size: 'sm' }) }),
+        ? { start_btn: submitBtn('start the hunt →', `${base}/?a=start_game`, { variant: 'primary' }) }
+        : { hint: text('sit tight. the host pulls the trigger.', { size: 'sm' }) }),
     },
   });
 }
@@ -96,7 +114,7 @@ function activeGamePage(base: string, player: Player, targetName: string) {
       page: stack(['header', 'target_badge', 'hint']),
       header: item('your target:', 'find them on farcaster.'),
       target_badge: badge(`@${targetName}`, { color: 'red' }),
-      hint: text('navigate to their profile and find the snap. the button only appears for you.', { size: 'sm' }),
+      hint: text('go to their profile and find the snap. the button only shows for you.', { size: 'sm' }),
     },
   });
 }
@@ -106,8 +124,8 @@ function eliminatedPage(base: string, player: Player, eliminatorName: string) {
     elements: {
       page: stack(['header', 'kills_badge', 'by_text', 'sep', 'spectate_btn']),
       header: item('eliminated. 💀', `${player.kill_count} kill${player.kill_count !== 1 ? 's' : ''} before you went down`),
-      kills_badge: badge(`eliminated by @${eliminatorName}`, { color: 'gray' }),
-      by_text: text('you can still watch the game play out.', { size: 'sm' }),
+      kills_badge: badge(`got by @${eliminatorName}`, { color: 'gray' }),
+      by_text: text('you can still watch the carnage unfold.', { size: 'sm' }),
       sep: separator(),
       spectate_btn: submitBtn('spectate →', `${base}/?a=spectate`, { variant: 'primary' }),
     },
@@ -121,9 +139,9 @@ async function spectatePage(base: string) {
   return buildResponse({
     elements: {
       page: stack(['header', 'alive_badge', 'sep', 'feed_header', 'btn_refresh']),
-      header: item('spectating', 'watch the hunt unfold'),
+      header: item('spectating.', 'watch the hunt unfold'),
       alive_badge: badge(
-        `${alive.length} hunter${alive.length !== 1 ? 's' : ''} alive`,
+        `${alive.length} hunter${alive.length !== 1 ? 's' : ''} still standing`,
         { color: alive.length <= 3 ? 'red' : 'blue' }
       ),
       sep: separator(),
@@ -146,7 +164,7 @@ function winnerPage(base: string, player: Player) {
       page: stack(['header', 'kills_badge', 'hint']),
       header: item('you won.', 'last one standing.'),
       kills_badge: badge(`${player.kill_count} kill${player.kill_count !== 1 ? 's' : ''}`, { color: 'green' }),
-      hint: text('snap assassin.', { size: 'sm', align: 'center' }),
+      hint: text('caster assassin.', { size: 'sm', align: 'center' }),
     },
   });
 }
@@ -155,7 +173,7 @@ function nothanksPage() {
   return buildResponse({
     elements: {
       page: stack(['msg']),
-      msg: item('maybe next time.', 'the game goes on without you.'),
+      msg: item('your loss.', 'the game goes on without you.'),
     },
   });
 }
@@ -164,7 +182,7 @@ function registrationClosedPage() {
   return buildResponse({
     elements: {
       page: stack(['header']),
-      header: item('registration closed.', 'game is already underway.'),
+      header: item('too late.', 'the hunt is already underway.'),
     },
   });
 }
@@ -188,23 +206,25 @@ export const mainSnap: SnapFunction = async (ctx) => {
 
   if (action === 'nope') return nothanksPage() as never;
 
+  if (action === 'explain') return explainerPage(base) as never;
+
   if (action === 'spectate') return (await spectatePage(base)) as never;
 
   if (action === 'start_game') {
     if (HOST_FID === null || fid !== HOST_FID) {
       return buildResponse({
-        elements: { page: stack(['msg']), msg: item('not authorised.', 'only the host can start the game.') },
+        elements: { page: stack(['msg']), msg: item('nice try.', 'only the host can start the game.') },
       }) as never;
     }
     if (config.game_state !== 'registration') {
       return buildResponse({
-        elements: { page: stack(['msg']), msg: item('already started.', 'the game is underway.') },
+        elements: { page: stack(['msg']), msg: item('already running.', 'the hunt is underway.') },
       }) as never;
     }
     const count = await db.getRegisteredCount();
     if (count < 2) {
       return buildResponse({
-        elements: { page: stack(['msg']), msg: item('not enough players.', `${count} registered — need at least 2.`) },
+        elements: { page: stack(['msg']), msg: item('not enough hunters.', `${count} registered — need at least 2.`) },
       }) as never;
     }
     await db.assignTargets();
@@ -212,7 +232,7 @@ export const mainSnap: SnapFunction = async (ctx) => {
       effects: ['confetti'],
       elements: {
         page: stack(['header', 'count_badge']),
-        header: item('game started.', 'targets assigned. the hunt is on.'),
+        header: item('the hunt is on.', 'targets assigned. good luck.'),
         count_badge: badge(`${count} hunters in play`, { color: 'red' }),
       },
     }) as never;

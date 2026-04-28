@@ -8,7 +8,7 @@ const app = new Hono();
 // Main game snap — registration, waiting room, active game dashboard
 registerSnapHandler(app, mainSnap, {
   openGraph: {
-    title: 'Snap Assassin',
+    title: 'Caster Assassin',
     description: 'An async elimination game on Farcaster. Hunt your target. Don\'t get got.',
   },
 });
@@ -18,7 +18,7 @@ registerSnapHandler(app, mainSnap, {
 registerSnapHandler(app, playerSnap, {
   path: '/player',
   openGraph: {
-    title: 'Snap Assassin — Player Profile',
+    title: 'Caster Assassin — Player Profile',
     description: 'This player is in the game. Are you their assassin?',
   },
 });
