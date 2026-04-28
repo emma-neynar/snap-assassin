@@ -1,9 +1,15 @@
-import { MEDIA_TYPE, ACTION_TYPE_GET } from '@farcaster/snap';
+import { MEDIA_TYPE, validateSnapResponse, snapResponseSchema } from '@farcaster/snap';
+import { snapJsonRenderCatalog } from '@farcaster/snap/ui';
 import { parseRequest } from '@farcaster/snap/server';
-import { payloadToResponse } from '@farcaster/snap-hono/dist/payloadToResponse.js';
 import { playerSnap } from '../src/pages/player.js';
 
 export const config = { runtime: 'nodejs' };
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Accept',
+};
 
 function snapOrigin(req: Request): string {
   const fromEnv = process.env.SNAP_PUBLIC_BASE_URL?.trim();
@@ -20,45 +26,60 @@ function resourcePath(req: Request): string {
   return u.pathname + u.search;
 }
 
+function buildLinkHeader(path: string): string {
+  return [MEDIA_TYPE, 'text/html']
+    .map(t => `<${path}>; rel="alternate"; type="${t}"`)
+    .join(', ');
+}
+
+function snapResponse(payload: unknown, path: string): Response {
+  const validation = validateSnapResponse(payload);
+  if (!validation.valid) {
+    return Response.json({ error: 'invalid snap page', issues: validation.issues }, { status: 400 });
+  }
+  const catalogResult = snapJsonRenderCatalog.validate((payload as any).ui);
+  if (!catalogResult.success) {
+    return Response.json({ error: 'invalid snap ui', issues: catalogResult.error?.issues ?? [] }, { status: 400 });
+  }
+  const finalized = snapResponseSchema.parse(payload);
+  return new Response(JSON.stringify(finalized), {
+    status: 200,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': `${MEDIA_TYPE}; charset=utf-8`,
+      Vary: 'Accept',
+      Link: buildLinkHeader(path),
+    },
+  });
+}
+
 export default async function handler(req: Request): Promise<Response> {
-  const accept = req.headers.get('accept') ?? '';
-  const wantsSnap = accept.toLowerCase().split(',').some(p =>
-    p.trim().split(';')[0]?.trim().toLowerCase() === MEDIA_TYPE.toLowerCase()
-  );
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  const path = resourcePath(req);
 
   if (req.method === 'GET') {
-    const snap = await playerSnap({ action: { type: ACTION_TYPE_GET }, request: req });
-    if (wantsSnap) {
-      return payloadToResponse(snap, { resourcePath: resourcePath(req), mediaTypes: [MEDIA_TYPE, 'text/html'] });
-    }
-    // Plain browser hit — return minimal HTML so the URL at least resolves
-    return new Response(`<!doctype html><title>Caster Assassin</title><p>This player is in the game.</p>`, {
-      headers: { 'content-type': 'text/html' },
-    });
+    const payload = await playerSnap({ action: { type: 'get' }, request: req });
+    return snapResponse(payload, path);
   }
 
   if (req.method === 'POST') {
-    const skipJFS = process.env.SKIP_JFS_VERIFICATION?.toLowerCase() === '1'
-      || process.env.SKIP_JFS_VERIFICATION?.toLowerCase() === 'true';
+    const skipJFS = ['1', 'true', 'yes'].includes(
+      process.env.SKIP_JFS_VERIFICATION?.trim().toLowerCase() ?? ''
+    );
     const parsed = await parseRequest(req, { skipJFSVerification: skipJFS, requestOrigin: snapOrigin(req) });
     if (!parsed.success) {
       const err = parsed.error;
       const status = err.type === 'signature' || err.type === 'fid_mismatch' ? 401 : 400;
-      return Response.json({ error: err.message }, { status });
+      const body = err.type === 'validation'
+        ? { error: 'invalid POST body', issues: err.issues }
+        : { error: err.message };
+      return Response.json(body, { status, headers: CORS_HEADERS });
     }
-    const snap = await playerSnap({ action: parsed.action, request: req });
-    return payloadToResponse(snap, { resourcePath: resourcePath(req), mediaTypes: [MEDIA_TYPE, 'text/html'] });
-  }
-
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Accept',
-      },
-    });
+    const payload = await playerSnap({ action: parsed.action, request: req });
+    return snapResponse(payload, path);
   }
 
   return new Response('Method not allowed', { status: 405 });
