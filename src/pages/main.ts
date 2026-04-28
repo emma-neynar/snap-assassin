@@ -27,14 +27,20 @@ function hookPage(base: string) {
 function availabilityPage(base: string) {
   return buildResponse({
     elements: {
-      page: stack(['header', 'avail_group', 'btn_lock']),
-      header: item("you're in.", 'when do you go quiet? this is your 8-hour safe window (UTC).'),
-      avail_group: {
-        type: 'toggle_group',
+      page: stack(['header', 'grid', 'btn_lock']),
+      header: item("pick your 8 quiet hours (UTC).", 'tap exactly 8 hours when you go dark — you\'re safe and unhuntable during these.'),
+      grid: {
+        type: 'cell_grid',
         props: {
-          name: 'window',
-          options: ['midnight–8am', '8am–4pm', '4pm–midnight', 'custom hour'],
-          orientation: 'vertical',
+          name: 'hours',
+          cols: 6,
+          rows: 4,
+          gap: 'sm',
+          rowHeight: 32,
+          select: 'multiple',
+          cells: Array.from({ length: 24 }, (_, i) => ({
+            label: String(i).padStart(2, '0'),
+          })),
         },
       },
       btn_lock: submitBtn('lock it in', `${base}/?a=set_avail`, { variant: 'primary' }),
@@ -42,16 +48,13 @@ function availabilityPage(base: string) {
   });
 }
 
-function customAvailPage(base: string) {
+function availabilityErrorPage(base: string, picked: number) {
   return buildResponse({
     elements: {
-      page: stack(['header', 'hour_slider', 'btn_confirm']),
-      header: item('custom window', 'your 8-hour window starts at this UTC hour (0 = midnight UTC).'),
-      hour_slider: {
-        type: 'slider',
-        props: { name: 'hour', min: 0, max: 23, step: 1, defaultValue: 0, label: 'window start (UTC hour)', showValue: true },
-      },
-      btn_confirm: submitBtn('confirm', `${base}/?a=set_custom_avail`, { variant: 'primary' }),
+      page: stack(['header', 'hint', 'btn_back']),
+      header: item(`you picked ${picked} hours.`, 'select exactly 8 — no more, no less.'),
+      hint: text('tap the grid again and choose exactly 8 UTC hours to go quiet.', { size: 'sm' }),
+      btn_back: submitBtn('try again', `${base}/?a=join`, { variant: 'primary' }),
     },
   });
 }
@@ -267,19 +270,16 @@ export const mainSnap: SnapFunction = async (ctx) => {
     const player = await db.getPlayer(fid);
     if (!player) return hookPage(base) as never;
 
-    const window = String(ctx.action.inputs['window'] ?? 'midnight–8am');
-    if (window === 'custom hour') return customAvailPage(base) as never;
+    const raw = ctx.action.inputs['hours'];
+    const selected = (Array.isArray(raw) ? raw : []).map(Number).filter(h => h >= 0 && h <= 23);
 
-    const start = window === '8am–4pm' ? 8 : window === '4pm–midnight' ? 16 : 0;
-    await db.setAvailability(fid, start);
-    return confirmedPage(base, `${base}/player?fid=${fid}`) as never;
-  }
+    if (selected.length !== 8) {
+      return availabilityErrorPage(base, selected.length) as never;
+    }
 
-  if (action === 'set_custom_avail') {
-    const player = await db.getPlayer(fid);
-    if (!player) return hookPage(base) as never;
-    const hour = Math.max(0, Math.min(23, Math.floor(Number(ctx.action.inputs['hour'] ?? 0))));
-    await db.setAvailability(fid, hour);
+    // Store selected quiet hours as a 24-bit bitmask in availability_start
+    const awayMask = selected.reduce((mask, h) => mask | (1 << h), 0);
+    await db.setAvailability(fid, awayMask);
     return confirmedPage(base, `${base}/player?fid=${fid}`) as never;
   }
 

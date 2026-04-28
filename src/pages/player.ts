@@ -230,15 +230,10 @@ export const playerSnap: SnapFunction = async (ctx) => {
 
     if (freshTarget.grace_period_active) return assassinWaitingView(freshTarget) as never;
 
-    // Availability window check
+    // Bitmask check: availability_start stores the 24 away hours as bit flags
     const utcHour = new Date().getUTCHours();
-    const start = freshTarget.availability_start;
-    const end = (start + freshTarget.availability_duration) % 24;
-    const inWindow = start < end
-      ? utcHour >= start && utcHour < end
-      : utcHour >= start || utcHour < end;
-
-    if (!inWindow) return missView() as never;
+    const isAway = Boolean((freshTarget.availability_start >> utcHour) & 1);
+    if (isAway) return missView() as never;
 
     await db.startGracePeriod(targetFid);
     await notifyFid(
