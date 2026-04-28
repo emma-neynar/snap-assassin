@@ -1,3 +1,7 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [
+    { "source": "/player", "destination": "/api/player" },
+    { "source": "/player/(.*)", "destination": "/api/player" },
+    { "source": "/(.*)", "destination": "/api/index" }
+  ]
 }
