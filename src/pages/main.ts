@@ -26,7 +26,7 @@ function hookPage(base: string) {
 function explainerPage(base: string) {
   return buildResponse({
     elements: {
-      page: stack(['header', 'rule1', 'rule2', 'rule3', 'rule4', 'sep', 'btn_join', 'btn_nope']),
+      page: stack(['header', 'rule1', 'rule2', 'rule3', 'rule4', 'sep', 'btn_join']),
       header: item('here\'s how it works.', 'an async elimination game on farcaster.'),
       rule1: text('🎯  you get a target. hunt them down by visiting their profile snap.', { size: 'sm' }),
       rule2: text('⏰  pick 8 quiet hours (UTC) when you go dark — you\'re unhuntable then.', { size: 'sm' }),
@@ -34,7 +34,6 @@ function explainerPage(base: string) {
       rule4: text('💀  last one standing wins.', { size: 'sm' }),
       sep: separator(),
       btn_join: submitBtn('let\'s go →', `${base}/?a=join`, { variant: 'primary' }),
-      btn_nope: submitBtn('not today', `${base}/?a=nope`),
     },
   });
 }
