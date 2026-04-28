@@ -119,7 +119,7 @@ async function waitingRoomPage(base: string, playerUrl: string, viewerFid: numbe
   const isHost = HOST_FID !== null && viewerFid === HOST_FID;
 
   const children = ['header', 'stats', 'share_btn'];
-  if (isHost) children.push('start_btn');
+  if (isHost) children.push('start_btn', 'reset_btn');
   else children.push('hint');
 
   return buildResponse({
@@ -129,7 +129,10 @@ async function waitingRoomPage(base: string, playerUrl: string, viewerFid: numbe
       stats: badge(`${registeredCount} registered`, { color: 'blue' }),
       share_btn: composeCastBtn('recruit more hunters', 'come play caster assassin 🎯', playerUrl),
       ...(isHost
-        ? { start_btn: submitBtn('start the hunt →', `${base}/?a=start_game`, { variant: 'primary' }) }
+        ? {
+            start_btn: submitBtn('start the hunt →', `${base}/?a=start_game`, { variant: 'primary' }),
+            reset_btn: submitBtn('reset game', `${base}/?a=reset_game`),
+          }
         : { hint: text('sit tight. the host pulls the trigger.', { size: 'sm' }) }),
     },
   });
@@ -265,6 +268,22 @@ export const mainSnap: SnapFunction = async (ctx) => {
         page: stack(['header', 'count_badge']),
         header: item('the hunt is on.', 'targets assigned. good luck.'),
         count_badge: badge(`${count} hunters in play`, { color: 'red' }),
+      },
+    }) as never;
+  }
+
+  if (action === 'reset_game') {
+    if (HOST_FID === null || fid !== HOST_FID) {
+      return buildResponse({
+        elements: { page: stack(['msg']), msg: item('nice try.', 'only the host can reset.') },
+      }) as never;
+    }
+    await db.resetGame();
+    return buildResponse({
+      elements: {
+        page: stack(['header', 'hint']),
+        header: item('reset.', 'all players cleared. back to registration.'),
+        hint: text('testers can rejoin from scratch now.', { size: 'sm' }),
       },
     }) as never;
   }

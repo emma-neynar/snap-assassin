@@ -250,6 +250,19 @@ export async function processElimination(targetFid: number, assassinFid: number)
   }
 }
 
+// ── Reset ─────────────────────────────────────────────────────────────────────
+
+export async function resetGame(): Promise<void> {
+  await client().batch(
+    [
+      { sql: `DELETE FROM players`, args: [] },
+      { sql: `DELETE FROM eliminations`, args: [] },
+      { sql: `INSERT OR REPLACE INTO game_config VALUES ('game_state','registration')`, args: [] },
+    ],
+    'write'
+  );
+}
+
 // ── Assignment ────────────────────────────────────────────────────────────────
 
 export async function assignTargets(): Promise<void> {
