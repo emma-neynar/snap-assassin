@@ -357,5 +357,18 @@ export const mainSnap: SnapFunction = async (ctx) => {
     return confirmedPage(base, `${base}/player?fid=${fid}`) as never;
   }
 
+  if (HOST_FID !== null && fid === HOST_FID) {
+    const registeredCount = await db.getRegisteredCount();
+    return buildResponse({
+      elements: {
+        page: stack(['header', 'stats', 'reset_btn', 'start_btn']),
+        header: item('host panel.', 'you\'re the host.'),
+        stats: badge(`${registeredCount} registered`, { color: 'blue' }),
+        reset_btn: submitBtn('reset game', `${base}/?a=reset_game`),
+        start_btn: submitBtn('start the hunt →', `${base}/?a=start_game`, { variant: 'primary' }),
+      },
+    }) as never;
+  }
+
   return hookPage(base) as never;
 };
