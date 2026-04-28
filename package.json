@@ -1,0 +1,24 @@
+{
+  "name": "snap-assassin",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "SKIP_JFS_VERIFICATION=true tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "vercel-build": "echo ok"
+  },
+  "dependencies": {
+    "@farcaster/snap": "2.0.1",
+    "@farcaster/snap-hono": "2.0.1",
+    "@libsql/client": "^0.14.0",
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
+  }
+}
