@@ -14,12 +14,11 @@ const HOST_FID = process.env.HOST_FID ? Number(process.env.HOST_FID) : null;
 function hookPage(base: string) {
   return buildResponse({
     elements: {
-      page: stack(['title', 'subtitle', 'sep', 'btn_in', 'btn_no']),
+      page: stack(['title', 'subtitle', 'sep', 'btn_in']),
       title: text('snap assassin', { weight: 'bold' }),
       subtitle: text("an async elimination game. hunt your target. don't get got.", { size: 'sm' }),
       sep: separator(),
       btn_in: submitBtn("i'm in", `${base}/?a=join`, { variant: 'primary' }),
-      btn_no: submitBtn('no thanks', `${base}/?a=nope`),
     },
   });
 }
