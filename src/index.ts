@@ -10,9 +10,10 @@ const app = new Hono();
 // with app.get(path, handler) on the same non-root path corrupts Hono 4.12's
 // matchResult in #dispatch. A global 'use' middleware runs before routing.
 app.use('*', async (c, next) => {
-  const path = new URL(c.req.url).pathname;
-  if (path === '/player' || path.startsWith('/player/')) {
-    return playerHandler(c.req.raw, new URL(c.req.url));
+  const base = process.env.SNAP_PUBLIC_BASE_URL || 'https://snap-assassin.vercel.app';
+  const url = new URL(c.req.url, base);
+  if (url.pathname === '/player' || url.pathname.startsWith('/player/')) {
+    return playerHandler(c.req.raw, url);
   }
   return next();
 });

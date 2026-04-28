@@ -42,7 +42,7 @@ export async function playerHandler(req: Request, url: URL): Promise<Response> {
   const resourcePath = url.pathname + url.search;
 
   // Rebuild request with full URL so snap handlers can parse query params
-  const fullReq = req.url === url.href ? req : new Request(url.href, req);
+  const fullReq = new Request(url.href, { method: req.method, headers: req.headers, body: req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined });
 
   if (req.method === 'OPTIONS') {
     return new Response(null, {
